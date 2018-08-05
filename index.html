@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap-theme.min.css">
+
+<script
+  src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+  integrity="sha256-3edrmyuQ0w65f8gfBsqowzjJe2iM6n0nKciPUp8y+7E="
+  crossorigin="anonymous"></script>
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+<style>
+
+.node {
+  cursor: pointer;
+}
+
+.node:hover {
+  stroke: #000;
+  stroke-width: 1.5px;
+}
+
+.node--leaf {
+  fill: white;
+}
+
+.label {
+  font: 11px "Helvetica Neue", Helvetica, Arial, sans-serif;
+  text-anchor: middle;
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff, 0 -1px 0 #fff;
+}
+
+.label,
+.node--root,
+.node--leaf {
+  pointer-events: none;
+}
+
+</style>
+
+<div class="container">
+  <div class="row">
+    <div class="col-md-10">
+      <svg width="800" height="800"></svg>
+    </div>
+    <div class="col-md-2">
+      <div class="members">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+
+function process_data_get_root(data){
+  let table = data.values.slice(2).map( (row, ind) => {
+    row = row.slice(0,6)
+    while(row.length < 6) row.push("")
+    return {
+      id: ind,
+      content: row[0],
+      duedate: row[1],
+      member: ["", "모두", "전원", "전부"].includes(row[2]) ? ["__ALL__"] : row[2].split(",").map(s=>s.trim()),
+      parent: row[3] == "" ? "__ROOT__" : row[3],
+      load: row[4] == "" ? 2 : parseInt(row[4]),
+      completed: row[5].length > 0
+    }
+  })
+
+  let members = []
+  table.forEach(d=>d.member.forEach(m=>m=="__ALL__"?null:members.push(m)))
+  members = new Set(members)
+
+  table.forEach(d=>{d.member = d.member.includes("__ALL__") ? members : new Set(d.member)})
+
+  table = table.filter(d=>!d.completed)
+  table.push({id: -1, content: "__ROOT__", duedate: "", member: new Set(), parent: "", load: "", completed: false})
+
+  let contents = [... new Set(table.map(row => row.content))]
+  let parents = [... new Set(table.map(row => row.parent))]
+  for(let project of parents){
+    if(!contents.includes(project)){
+      table.push({
+        id: table.length,
+        content: project,
+        duedate: "",
+        member: new Set(),
+        parent: "__ROOT__",
+        load: ""
+      })
+    }
+  }
+
+  root = d3.stratify().id(d => d.content).parentId(d => d.parent)(table)
+  return [root, members]
+}
+
+var svg = d3.select("svg"),
+    margin = 20,
+    diameter = +svg.attr("width"),
+    g = svg.append("g").attr("transform", "translate(" + diameter / 2 + "," + diameter / 2 + ")");
+
+var pack = d3.pack()
+    .size([diameter - margin, diameter - margin])
+    .padding(2);
+
+let colorScale = (h) => { 
+  return d3.scaleLinear()
+    .domain([0 , 5])
+    .range(["hsla("+h+",100%,60%,0)", "hsla("+h+",100%,60%,1)"])
+    .interpolate(d3.interpolateHcl);
+}
+
+let simple_hash = (s, base=199) => {
+  ret = 0
+  for(let i=0;i<s.length;i++){
+    ret *= base
+    ret += s.charCodeAt(i) % base
+  }
+  return ret
+}
+
+var getParameters = function (paramName) {
+    // 리턴값을 위한 변수 선언
+    var returnValue;
+
+    // 현재 URL 가져오기
+    var url = location.href;
+
+    // get 파라미터 값을 가져올 수 있는 ? 를 기점으로 slice 한 후 split 으로 나눔
+    var parameters = (url.slice(url.indexOf('?') + 1, url.length)).split('&');
+
+    // 나누어진 값의 비교를 통해 paramName 으로 요청된 데이터의 값만 return
+    for (var i = 0; i < parameters.length; i++) {
+        var varName = parameters[i].split('=')[0];
+        if (varName.toUpperCase() == paramName.toUpperCase()) {
+            returnValue = parameters[i].split('=')[1];
+            return decodeURIComponent(returnValue);
+        }
+    }
+};
+
+sheet_id = getParameters('sheet_id')
+sheet_name = getParameters('sheet_name')
+api_key = getParameters('api_key')
+url = "https://sheets.googleapis.com/v4/spreadsheets/" + sheet_id + "/values/" + sheet_name + "?key=" + api_key
+
+//d3.json("nalida.json", function(error, data) {
+d3.json(url, function(error, data) {
+  if (error) throw error;
+
+  processed_data = process_data_get_root(data)
+  root = processed_data[0]
+      .sum(function(d) { return d.children? 0 : d.load; })
+      .sort(function(a, b) { return b.value - a.value; });
+
+  members = processed_data[1]
+  
+  member_checkboxes = d3.select(".members").selectAll("div")
+    .data([...members])
+    .enter().append("div")
+
+  member_checkboxes.append("input")
+      .attr("type", "checkbox")
+      .attr("name", d => d)
+      .attr("onclick", "paint_again()")
+  member_checkboxes.append("span").text(d=>d)
+
+  get_checked_member = () => {
+    ret = [...$("input").filter((i, d)=>$(d).prop("checked")).map((i, d)=>$(d).attr("name"))]
+    return ret.length > 0 ? ret : [...members]
+  }
+
+  paint_again = () => {
+    g.selectAll("circle")
+      .style("fill", function(d) { return d.parent && get_checked_member().filter(m => d.data.member.has(m)).length > 0 ? d.color(d.depth) : "transparent"})
+  }
+  
+  root.children.map((node, ind) => {
+    let h = simple_hash(node.data.content) % 360
+    let color = colorScale(h)
+    node.each(node => node.color = color)
+  })
+
+  root.eachAfter(node => {
+    if(node.children) node.children.forEach(child=>{
+      node.data.member = new Set([...node.data.member, ...child.data.member])
+    })
+  })
+
+  var focus = root,
+      nodes = pack(root).descendants(),
+      view;
+
+  var circle = g.selectAll("circle")
+    .data(nodes)
+    .enter().append("circle")
+      .attr("class", function(d) { return d.parent ? d.children ? "node" : "node node--leaf" : "node node--root"; })
+      .style("fill", function(d) { return d.parent && get_checked_member().filter(m => d.data.member.has(m)).length > 0 ? d.color(d.depth) : "transparent"})
+      .on("click", function(d) { if (focus !== d) zoom(d), d3.event.stopPropagation(); });
+
+  var text = g.selectAll("text")
+    .data(nodes)
+    .enter().append("text")
+      .attr("class", "label")
+      .style("fill-opacity", function(d) { return d.parent === root ? 1 : 0; })
+      .style("display", function(d) { return d.parent === root ? "inline" : "none"; })
+      .style("font-weight", "bold")
+      .style("font-size", "20px")
+      .text(function(d) { return d.data.content.slice(0,10) + (d.data.content.length > 10 ? "..." : ""); });
+
+  var node = g.selectAll("circle,text");
+
+  svg
+      .style("background", "rgb(241,241,241)")
+      .on("click", function() { zoom(root); });
+
+  zoomTo([root.x, root.y, root.r * 2 + margin]);
+
+  function zoom(d) {
+    var focus0 = focus; focus = d;
+
+    var transition = d3.transition()
+        .duration(d3.event.altKey ? 7500 : 750)
+        .tween("zoom", function(d) {
+          var i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2 + margin]);
+          return function(t) { zoomTo(i(t)); };
+        });
+
+    transition.selectAll("text")
+      .filter(function(d) { return d.parent === focus || this.style.display === "inline"; })
+        .style("fill-opacity", function(d) { return d.parent === focus ? 1 : 0; })
+        .on("start", function(d) { if (d.parent === focus) this.style.display = "inline"; })
+        .on("end", function(d) { if (d.parent !== focus) this.style.display = "none"; });
+  }
+
+  function zoomTo(v) {
+    var k = diameter / v[2]; view = v;
+    node.attr("transform", function(d) { return "translate(" + (d.x - v[0]) * k + "," + (d.y - v[1]) * k + ")"; });
+    circle.attr("r", function(d) { return d.r * k; });
+  }
+});
+
+</script>
