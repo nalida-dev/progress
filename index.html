@@ -148,6 +148,7 @@ url = "https://sheets.googleapis.com/v4/spreadsheets/" + sheet_id + "/values/" +
 
 //d3.json("nalida.json", function(error, data) {
 d3.json(url, function(error, data) {
+  console.log(data)
   if (error) throw error;
 
   processed_data = process_data_get_root(data)
@@ -207,8 +208,8 @@ d3.json(url, function(error, data) {
       .style("fill-opacity", function(d) { return d.parent === root ? 1 : 0; })
       .style("display", function(d) { return d.parent === root ? "inline" : "none"; })
       .style("font-weight", "bold")
-      .style("font-size", "20px")
-      .text(function(d) { return d.data.content.slice(0,10) + (d.data.content.length > 10 ? "..." : ""); });
+      .style("font-size", d=>d.depth==1?"20px":"15px")
+      .text(function(d) { return d.data.content.slice(0,d.depth==1?10:25) + (d.data.content.length > (d.depth==1?10:25) ? "..." : ""); });
 
   var node = g.selectAll("circle,text");
 
