@@ -40,17 +40,20 @@
 
 <div class="container">
   <div class="row">
-    <div class="col-md-10">
+    <div class="col-md-9">
       <svg width="800" height="800"></svg>
-    </div>
-    <div class="col-md-2">
       <div class="members">
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="panel">
       </div>
     </div>
   </div>
 </div>
 
 <script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://momentjs.com/downloads/moment.js"></script>
 <script>
 
 function process_data_get_root(data){
@@ -60,7 +63,7 @@ function process_data_get_root(data){
     return {
       id: ind,
       content: row[0],
-      duedate: row[1],
+      duedate: row[1].split('.').length == 3 ? moment(row[1], "YYYY.MM.DD") : moment().add(30, 'days'),
       member: ["", "모두", "전원", "전부"].includes(row[2]) ? ["__ALL__"] : row[2].split(",").map(s=>s.trim()),
       parent: row[3] == "" ? "__ROOT__" : row[3],
       load: row[4] == "" ? 2 : parseInt(row[4]),
@@ -93,7 +96,12 @@ function process_data_get_root(data){
   }
 
   root = d3.stratify().id(d => d.content).parentId(d => d.parent)(table)
-  return [root, members]
+
+  let tasks = table.slice(0).filter(d=>d.duedate != "").sort((a, b) => {
+    return a.duedate.format("YYYYMMDD").localeCompare(b.duedate.format("YYYYMMDD"))
+  })
+
+  return [root, members, tasks]
 }
 
 var svg = d3.select("svg"),
@@ -161,6 +169,8 @@ d3.json(url, function(error, data) {
   member_checkboxes = d3.select(".members").selectAll("div")
     .data([...members])
     .enter().append("div")
+      .style("display", "inline")
+      .style("margin-left", "10px")
 
   member_checkboxes.append("input")
       .attr("type", "checkbox")
@@ -178,6 +188,19 @@ d3.json(url, function(error, data) {
       .style("fill", function(d) { return d.parent && get_checked_member().filter(m => d.data.member.has(m)).length > 0 ? d.color(d.depth) : "transparent"})
   }
   
+  tasks = processed_data[2]
+  task_div = d3.select(".panel").selectAll("div")
+    .data(tasks)
+    .enter().append("div")
+      .style("margin-bottom", "15px")
+
+  task_div.append("div").text((d,i)=> "[" + i + "] " + d.duedate.format("YYYY.MM.DD"))
+  task_div.append("div").text(d=>d.content)
+
+  d3.select(".panel").style("height", "800px").style("overflow-y", "scroll")
+  
+
+
   root.children.map((node, ind) => {
     let h = simple_hash(node.data.content) % 360
     let color = colorScale(h)
