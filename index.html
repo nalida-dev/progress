@@ -240,7 +240,7 @@ d3.json(url, function(error, data) {
   
 
   console.log(root.leaves())
-  let tasks = root.leaves().sort((a, b)=>{
+  let tasks = root.leaves().filter(d=>d.value > 0).sort((a, b)=>{
     return a.data.duedate.format("YYYYMMDD").localeCompare(b.data.duedate.format("YYYYMMDD"))
 
   })
