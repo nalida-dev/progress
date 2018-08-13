@@ -36,12 +36,16 @@
   pointer-events: none;
 }
 
+#timeline_svg{
+  width: 100%;
+}
+
 </style>
 
 <div class="container">
   <div class="row">
     <div class="col-md-9">
-      <svg width="800" height="800"></svg>
+      <svg id="main_svg" width="800" height="800"></svg>
       <div class="members">
       </div>
     </div>
@@ -53,7 +57,7 @@
   <div class="row">
     <div class="col-md-12">
       <div class="timeline">
-        <div id="timeline_marker"></div>
+        <svg id="timeline_svg"></svg>
       </div>
     </div>
   </div>
@@ -61,6 +65,7 @@
 
 <script src="https://d3js.org/d3.v4.min.js"></script>
 <script src="https://momentjs.com/downloads/moment.js"></script>
+<script src="./util.js"></script>
 <script>
 
 function process_data_get_root(data){
@@ -111,7 +116,7 @@ function process_data_get_root(data){
   return [root, members, tasks]
 }
 
-var svg = d3.select("svg"),
+var svg = d3.select("#main_svg"),
     margin = 20,
     diameter = +svg.attr("width"),
     g = svg.append("g").attr("transform", "translate(" + diameter / 2 + "," + diameter / 2 + ")");
@@ -135,26 +140,6 @@ let simple_hash = (s, base=199) => {
   }
   return ret
 }
-
-var getParameters = function (paramName) {
-    // 리턴값을 위한 변수 선언
-    var returnValue;
-
-    // 현재 URL 가져오기
-    var url = location.href;
-
-    // get 파라미터 값을 가져올 수 있는 ? 를 기점으로 slice 한 후 split 으로 나눔
-    var parameters = (url.slice(url.indexOf('?') + 1, url.length)).split('&');
-
-    // 나누어진 값의 비교를 통해 paramName 으로 요청된 데이터의 값만 return
-    for (var i = 0; i < parameters.length; i++) {
-        var varName = parameters[i].split('=')[0];
-        if (varName.toUpperCase() == paramName.toUpperCase()) {
-            returnValue = parameters[i].split('=')[1];
-            return decodeURIComponent(returnValue);
-        }
-    }
-};
 
 sheet_id = getParameters('sheet_id')
 sheet_name = getParameters('sheet_name')
@@ -271,5 +256,11 @@ d3.json(url, function(error, data) {
     node.attr("transform", function(d) { return "translate(" + (d.x - v[0]) * k + "," + (d.y - v[1]) * k + ")"; });
     circle.attr("r", function(d) { return d.r * k; });
   }
+
+
+  let timeline = d3.select("#timeline_svg"),
+    width = parseInt(timeline.style("width"))
+
+
 });
 </script>
