@@ -57,7 +57,7 @@
   <div class="row">
     <div class="col-md-12">
       <div class="timeline">
-        <svg id="timeline_svg"></svg>
+        <svg id="timeline_svg" height="200"></svg>
       </div>
     </div>
   </div>
@@ -68,52 +68,121 @@
 <script src="./util.js"></script>
 <script>
 
-function process_data_get_root(data){
-  let table = data.values.slice(2).map( (row, ind) => {
-    row = row.slice(0,6)
-    while(row.length < 6) row.push("")
-    return {
-      id: ind,
-      content: row[0],
-      duedate: row[1].split('.').length == 3 ? moment(row[1], "YYYY.MM.DD") : moment().add(30, 'days'),
-      member: ["", "모두", "전원", "전부"].includes(row[2]) ? ["__ALL__"] : row[2].split(",").map(s=>s.trim()),
-      parent: row[3] == "" ? "__ROOT__" : row[3],
-      load: row[4] == "" ? 2 : parseInt(row[4]),
-      completed: row[5].length > 0
+let __TASK_ID_CNT__ = 0
+function Task(content, duedate, member, project, workload, completed){
+  this.id = __TASK_ID_CNT__++
+  this.content = (d => {
+    return d == "" ? "내용 없음" : d
+  })(content)
+  this.duedate = (d => {
+    return d.split('.').length == 3 ? 
+      moment(d, "YYYY.MM.DD").add(12, 'hours') : 
+      moment().add(14, 'days')
+  })(duedate)
+  this.member = (d => {
+    if(typeof d == "string"){
+      return ["", "모두", "전원", "전부"].includes(d) ?
+        ["__ALL__"] : 
+        d.split(",").map(s=>s.trim())
+    }
+    else return d // d might be new Set()
+  })(member)
+  this.project = project
+  this.workload = (d => {
+    return d == "" ? 2 : parseInt(d)
+  })(workload)
+  this.completion_rate = (d => {
+    d_int = parseInt(d)
+    if(!isNaN(d_int)) return Math.min(Math.max(d_int, 0), 100)
+    if(d.length > 0) return 100
+    return 0
+  })(completed)
+
+  this.is_completed = function(){ return this.completion_rate == 100 }
+  this.remaining_workload = function(){
+    return this.workload * (100 - this.completion_rate) / 100
+  }
+}
+
+function fix_member(tasks){
+  let members = []
+  tasks.forEach(task => task.member.forEach(m => m=="__ALL__" ? null : members.push(m)))
+  members = new Set(members)
+  tasks.forEach(task => {
+    task.member = task.member.includes("__ALL__") ? members : new Set(task.member)
+  })
+}
+
+function construct_hierarchy(tasks){
+  //(content, duedate, member, project, workload, completed)
+  tasks.forEach(task => {
+    if(task.project == "") task.project = "__ROOT__"
+  })
+  let names = [["__ROOT__", ""]]
+  tasks.map(task => task.project).forEach(project => {
+    args = project.split(':')
+    for(let i=0;i<args.length;i++){
+      let me = args.slice(0, i+1).join(':')
+      let parent = args.slice(0, i).join(':')
+      parent = (parent == "" ? "__ROOT__" : parent)
+      names.push([me, parent])
     }
   })
+  names = [... new Set(names.map(d => JSON.stringify(d)))].map(d => JSON.parse(d))
+  names.forEach(me_and_parent => {
+      tasks.push(new Task(me_and_parent[0], "", new Set(), me_and_parent[1], "", ""))
+  })
+  console.log(tasks)
 
-  let members = []
-  table.forEach(d=>d.member.forEach(m=>m=="__ALL__"?null:members.push(m)))
-  members = new Set(members)
+  root = d3.stratify()
+    .id(d => d.id)
+    .parentId(d => {
+      for(let task of tasks){
+        if(task.content == d.project) return task.id
+      }
+      return undefined
+    })(tasks)
 
-  table.forEach(d=>{d.member = d.member.includes("__ALL__") ? members : new Set(d.member)})
-
-  table = table.filter(d=>!d.completed)
-  table.push({id: -1, content: "__ROOT__", duedate: "", member: new Set(), parent: "", load: "", completed: false})
-
-  let contents = [... new Set(table.map(row => row.content))]
-  let parents = [... new Set(table.map(row => row.parent))]
-  for(let project of parents){
-    if(!contents.includes(project)){
-      table.push({
-        id: table.length,
-        content: project,
-        duedate: "",
-        member: new Set(),
-        parent: "__ROOT__",
-        load: ""
+  root.eachAfter(node => {
+    if(node.children) {
+      node.children.forEach(child=>{
+        node.data.member = new Set([...node.data.member, ...child.data.member])
       })
     }
-  }
-
-  root = d3.stratify().id(d => d.content).parentId(d => d.parent)(table)
-
-  let tasks = table.slice(0).filter(d=>d.duedate != "").sort((a, b) => {
-    return a.duedate.format("YYYYMMDD").localeCompare(b.duedate.format("YYYYMMDD"))
   })
 
-  return [root, members, tasks]
+  let colorScale = (h) => { 
+    return d3.scaleLinear()
+      .domain([0 , 5])
+      .range(["hsla("+h+",100%,60%,0)", "hsla("+h+",100%,60%,1)"])
+      .interpolate(d3.interpolateHcl);
+  }
+  let simple_hash = (s, base=199) => {
+    ret = 0
+    for(let i=0;i<s.length;i++){
+      ret *= base
+      ret += s.charCodeAt(i) % base
+    }
+    return ret
+  }
+  root.children.map((node, ind) => {
+    let h = simple_hash(node.data.content) % 360
+    let color = colorScale(h)
+    node.each(node => node.color = color)
+  })
+
+  return root
+}
+
+function process_data_get_root(data){
+  let tasks = data.values.slice(2).map((row, ind) => {
+    row = row.slice(0, 6); while(row.length < 6) row.push("")
+    return new Task(...row)
+  })
+  fix_member(tasks)
+  root = construct_hierarchy(tasks)
+
+  return root
 }
 
 var svg = d3.select("#main_svg"),
@@ -125,22 +194,6 @@ var pack = d3.pack()
     .size([diameter - margin, diameter - margin])
     .padding(2);
 
-let colorScale = (h) => { 
-  return d3.scaleLinear()
-    .domain([0 , 5])
-    .range(["hsla("+h+",100%,60%,0)", "hsla("+h+",100%,60%,1)"])
-    .interpolate(d3.interpolateHcl);
-}
-
-let simple_hash = (s, base=199) => {
-  ret = 0
-  for(let i=0;i<s.length;i++){
-    ret *= base
-    ret += s.charCodeAt(i) % base
-  }
-  return ret
-}
-
 sheet_id = getParameters('sheet_id')
 sheet_name = getParameters('sheet_name')
 api_key = getParameters('api_key')
@@ -151,12 +204,17 @@ d3.json(url, function(error, data) {
   console.log(data)
   if (error) throw error;
 
-  processed_data = process_data_get_root(data)
-  root = processed_data[0]
-      .sum(function(d) { return d.children? 0 : d.load; })
+  root = process_data_get_root(data)
+  console.log(root)
+
+  root.eachAfter(node => {
+      node.value = 0
+      if(node.children) node.children.forEach(child => {node.value += child.value })
+      else node.value = node.data.remaining_workload()
+    })
       .sort(function(a, b) { return b.value - a.value; });
 
-  members = processed_data[1]
+  members = root.data.member
   
   member_checkboxes = d3.select(".members").selectAll("div")
     .data([...members])
@@ -180,34 +238,26 @@ d3.json(url, function(error, data) {
       .style("fill", function(d) { return d.parent && get_checked_member().filter(m => d.data.member.has(m)).length > 0 ? d.color(d.depth) : "transparent"})
   }
   
-  tasks = processed_data[2]
+
+  console.log(root.leaves())
+  let tasks = root.leaves().sort((a, b)=>{
+    return a.data.duedate.format("YYYYMMDD").localeCompare(b.data.duedate.format("YYYYMMDD"))
+
+  })
   task_div = d3.select(".panel").selectAll("div")
     .data(tasks)
     .enter().append("div")
       .style("margin-bottom", "15px")
 
-  task_div.append("div").text((d,i)=> "[" + i + "] " + d.duedate.format("YYYY.MM.DD"))
-  task_div.append("div").text(d=>d.content)
+  task_div.append("div").text((d,i)=> "[" + (i+1) + "] [" + [...d.data.member] + "] " + d.data.duedate.format("YYYY.MM.DD"))
+  task_div.append("div").text(d=>d.data.content)
 
   d3.select(".panel").style("height", "800px").style("overflow-y", "scroll")
   
-
-
-  root.children.map((node, ind) => {
-    let h = simple_hash(node.data.content) % 360
-    let color = colorScale(h)
-    node.each(node => node.color = color)
-  })
-
-  root.eachAfter(node => {
-    if(node.children) node.children.forEach(child=>{
-      node.data.member = new Set([...node.data.member, ...child.data.member])
-    })
-  })
-
   var focus = root,
-      nodes = pack(root).descendants(),
+      nodes = pack(root).descendants().filter(d=>d.value > 0),
       view;
+    
 
   var circle = g.selectAll("circle")
     .data(nodes)
@@ -257,10 +307,72 @@ d3.json(url, function(error, data) {
     circle.attr("r", function(d) { return d.r * k; });
   }
 
+/*
+  { // Timeline
 
-  let timeline = d3.select("#timeline_svg"),
-    width = parseInt(timeline.style("width"))
+    let timeline = d3.select("#timeline_svg"),
+      width = parseInt(timeline.style("width")),
+      height = parseInt(timeline.style("height")),
+      timeline_data = root.leaves().slice()
+    
+    
+    let x = d3.scaleLinear()
+    .domain([moment().valueOf(), d3.max(timeline_data.map(d=>d.data.duedate.valueOf()))])
+    .range([0, width])
 
+    let duedates = timeline_data.map(d=>d.data.duedate)
+    let hour = x(moment().add(1, 'hours'))
 
+    timeline_data.forEach(d => d.radius = d.data.load * hour * 4)
+
+    console.log(d3.extent(timeline_data.map(d=>d.data.duedate.valueOf())))
+    
+    circles = timeline.append("g").attr("transform", "translate(" + width/2 + ", " + height + ")")
+      .selectAll("circle").data(timeline_data).enter().append("circle")
+        .style("fill", d=>d.color(d.depth))
+
+    console.log(timeline_data)
+    
+    let simulation = d3.forceSimulation()
+      .nodes(timeline_data)
+      .force("gravity", ()=>{
+        for(let tdata of timeline_data){
+            if(tdata.y < 0) tdata.vy += 1
+        }
+      })
+      .force("collision", d3.forceCollide(d=>d.radius))
+      .on("tick", () => {
+        for(let tdata of timeline_data){
+          if(tdata.y + tdata.radius > 0){
+            tdata.y = -tdata.radius
+          }
+          if(tdata.x + tdata.radius > x(tdata.data.duedate.valueOf())){
+            tdata.x = x(tdata.data.duedate.valueOf()) - tdata.radius
+          }
+          if(tdata.x - tdata.radius < 0){
+            tdata.x = tdata.radius
+          }
+        }
+        circles
+          .attr("cx", d=>d.x)
+          .attr("cy", d=>d.y)
+          .attr("r", d=>d.radius)
+      })
+    
+      console.log(timeline_data.map(d=>d.data.duedate.valueOf()))
+
+      d3.drag()
+        .on("start", function(d){
+            simulation.restart()
+            simulation.alpha(1)
+        })
+        .on("drag", function(d) {
+            d3.select(this)
+                .attr("cx", d.x = d3.event.x)
+                .attr("cy", d.y = d3.event.y)
+        })(circles)
+
+  } // End Timeline
+  */
 });
 </script>
