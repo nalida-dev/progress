@@ -50,6 +50,13 @@
       </div>
     </div>
   </div>
+  <div class="row">
+    <div class="col-md-12">
+      <div class="timeline">
+        <div id="timeline_marker"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://d3js.org/d3.v4.min.js"></script>
@@ -265,5 +272,4 @@ d3.json(url, function(error, data) {
     circle.attr("r", function(d) { return d.r * k; });
   }
 });
-
 </script>
