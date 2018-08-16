@@ -1,11 +1,12 @@
 # Continuum
-![continuum prototype](https://media.giphy.com/media/dgKbAYwOpT6dl7UYNi/giphy.gif)
 
 Continuum visualizes **estimated trends of workload** of **heterogeneous, hierarchical tasks** with **nearly-zero amount of overheads** for individual or small-group workers lacking enough energy for manual arrangements.
 * It **integrates progress(past), remaining works(present), and anticipated schedule(future)** in a single consistent scheme
 * It supports rich **default actions and missing value predictions** to minimize operational overheads
 * It can be added on any kind of spreadsheet
   * currently works only for Google Spreadsheet
+
+![continuum prototype](https://media.giphy.com/media/dgKbAYwOpT6dl7UYNi/giphy.gif)
 
 # Usage
 
