@@ -69,7 +69,7 @@
 <script>
 
 let __TASK_ID_CNT__ = 0
-function Task(content, duedate, member, project, workload, completed){
+function Task(content, duedate, member, project, workload, completed, completed_date){
   this.id = __TASK_ID_CNT__++
   this.content = (d => {
     return d == "" ? "내용 없음" : d
@@ -97,6 +97,12 @@ function Task(content, duedate, member, project, workload, completed){
     if(d.length > 0) return 100
     return 0
   })(completed)
+  this.completed_date = (d => {
+    console.log(d.split('.'))
+    return d.split('.').length == 3 ? 
+      moment(d, "YYYY.MM.DD hh:mm aa") : 
+      moment().add(14, 'days')
+  })(completed_date)
 
   this.is_completed = function(){ return this.completion_rate == 100 }
   this.remaining_workload = function(){
@@ -130,7 +136,7 @@ function construct_hierarchy(tasks){
   })
   names = [... new Set(names.map(d => JSON.stringify(d)))].map(d => JSON.parse(d))
   names.forEach(me_and_parent => {
-      tasks.push(new Task(me_and_parent[0], "", new Set(), me_and_parent[1], "", ""))
+      tasks.push(new Task(me_and_parent[0], "", new Set(), me_and_parent[1], "", "", ""))
   })
   console.log(tasks)
 
@@ -176,7 +182,7 @@ function construct_hierarchy(tasks){
 
 function process_data_get_root(data){
   let tasks = data.values.slice(2).map((row, ind) => {
-    row = row.slice(0, 6); while(row.length < 6) row.push("")
+    row = row.slice(0, 7); while(row.length < 7) row.push("")
     return new Task(...row)
   })
   fix_member(tasks)
@@ -318,7 +324,8 @@ d3.json(url, function(error, data) {
         workload: d.value > 0 ? d.data.remaining_workload() : d.data.workload,
         color: x => get_checked_member().filter(k=>d.data.member.has(k)).length > 0 ? d.color(x) : "transparent",
         depth: d.depth,
-        completed: d.value == 0
+        completed: d.value == 0,
+        completed_date: d.data.completed_date
       }))
 
     console.log(timeline_data)
@@ -373,7 +380,8 @@ d3.json(url, function(error, data) {
 
     timeline_data.forEach(d => {
       d.radius = d.workload * hour * 4
-      d.x = x(d.duedate) - d.radius
+      if(!d.completed) d.x = x(d.duedate) - d.radius
+      if(d.completed) d.x = x(d.completed_date) - d.radius
     })
 
     simulation
@@ -388,14 +396,21 @@ d3.json(url, function(error, data) {
           if(tdata.y + tdata.radius > 0){
             tdata.y = -tdata.radius
           }
-          if(tdata.x + tdata.radius > x(tdata.duedate)){
-            tdata.x = x(tdata.duedate) - tdata.radius
+          if(tdata.completed){
+            if(tdata.x + tdata.radius > x(tdata.completed_date)){
+              tdata.x = x(tdata.completed_date) - tdata.radius
+            }
+            if(tdata.x + tdata.radius > width / 2){
+              tdata.x = width / 2 - tdata.radius
+            }
           }
-          if(!tdata.completed && tdata.x - tdata.radius < width / 2){
-            tdata.x = tdata.radius + width / 2
-          }
-          if(tdata.completed && tdata.x + tdata.radius > width / 2){
-            tdata.x = width / 2 - tdata.radius
+          else{
+            if(tdata.x + tdata.radius > x(tdata.duedate)){
+              tdata.x = x(tdata.duedate) - tdata.radius
+            }
+            if(tdata.x - tdata.radius < width / 2){
+              tdata.x = tdata.radius + width / 2
+            }
           }
         }
         circles
