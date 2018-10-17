@@ -184,7 +184,7 @@ function construct_hierarchy(tasks){
 }
 
 function process_data_get_root(data){
-  let tasks = data.values.slice(2).map((row, ind) => {
+  let tasks = data.values.slice(2).filter(row => row.join('').length > 0).map((row, ind) => {
     row = row.slice(0, 7); while(row.length < 7) row.push("")
     return new Task(...row)
   })
