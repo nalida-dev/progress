@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ToDoDataService } from '../to-do-data.service';
 import { ActivatedRoute } from '@angular/router';
+import * as moment from 'moment';
 
 @Component({
   selector: 'app-bar-progress',
@@ -16,6 +17,11 @@ export class BarProgressComponent implements OnInit {
     private toDoDataService: ToDoDataService) { }
 
   ngOnInit() {
+    this.fetchData();
+    console.log(moment());
+  }
+
+  fetchData() {
     const sheet_id = this.route.snapshot.paramMap.get('sheet_id');
     const sheet_name = this.route.snapshot.paramMap.get('sheet_name');
     const api_key = this.route.snapshot.paramMap.get('api_key');
@@ -23,12 +29,7 @@ export class BarProgressComponent implements OnInit {
       .subscribe(data => {
         console.log(data);
         this.data = data;
-      })
-    this.toDoDataService.fetchToDoData(sheet_id, sheet_name, api_key)
-      .subscribe(data => {
-        console.log("HIHIHI");
-        console.log(data);
-      })
-  }
+      });
+    }
 
 }
