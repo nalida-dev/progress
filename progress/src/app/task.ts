@@ -1,9 +1,19 @@
 import * as moment from 'moment';
 
 export class Task {
-  task_id_cnt = 0;
+  static task_id_cnt = 0;
+
+  id: number;
+  content: string;
+  duedate: moment.Moment;
+  member: string;
+  project: string;
+  workload: number;
+  completion_rate: number;
+  completed_date: moment.Moment;
+
   constructor(content, duedate, member, project, workload, completed="", completed_date="") {
-    this.id = this.task_id_cnt++;
+    this.id = Task.task_id_cnt++;
     this.content = (d => {
       return d == "" ? "내용 없음" : d
     })(content)
