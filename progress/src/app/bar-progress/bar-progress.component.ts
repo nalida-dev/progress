@@ -6,6 +6,7 @@ import * as Highcharts from 'highcharts';
 import { Task } from '../task';
 import { getWeekByMoment, getWeekBySpecifier, Week } from '../dateutil';
 import * as d3 from 'd3';
+import { nameToColor } from '../utils';
 
 @Component({
   selector: 'app-bar-progress',
@@ -151,6 +152,7 @@ export class BarProgressComponent implements OnInit {
         type: 'column',
         name: name,
         data: [...Array.from('0'.repeat(ind)).map(d => +d), workhour],
+        color: nameToColor(name),
         // stack: 'male',
         // color: 'red',
       });
