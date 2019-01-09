@@ -4,7 +4,8 @@ import { ActivatedRoute } from '@angular/router';
 import * as moment from 'moment';
 import * as Highcharts from 'highcharts';
 import { Task } from '../task';
-import { ArgumentOutOfRangeError } from 'rxjs';
+import { getWeekByMoment, getWeekBySpecifier, Week } from '../dateutil';
+import * as d3 from 'd3';
 
 @Component({
   selector: 'app-bar-progress',
@@ -13,9 +14,7 @@ import { ArgumentOutOfRangeError } from 'rxjs';
 })
 export class BarProgressComponent implements OnInit {
 
-  tasks: Task[] = null;
-  allMembers: string[];
-  aggr: {[key: string]: number};
+  tasks: Task[];
 
   constructor(
     private route: ActivatedRoute,
@@ -23,7 +22,6 @@ export class BarProgressComponent implements OnInit {
 
   ngOnInit() {
     this.fetchData();
-    console.log(moment());
   }
 
   fetchData() {
@@ -34,58 +32,104 @@ export class BarProgressComponent implements OnInit {
       .subscribe(data => {
         console.log(data);
         this.tasks = data;
-        this.fixMembers();
-        this.transformData();
-        this.drawChart();
+        this.makeWeekOptions();
+        this.render();
       });
   }
 
-  fixMembers() {
-    this.allMembers = this.tasks.reduce((accum: string[], task) => {
+  render(_this = this) {
+    const selectWeek = d3.select('#bar-progress-select-week');
+    const week = getWeekBySpecifier(selectWeek.property('value'));
+    const data = _this.transformData(week);
+    _this.drawChart(data);
+  }
+
+  transformData(week: Week) {
+    const { lastSaturday, thisFriday } = week;
+    const { tasks, allMembers } = this.fixMembers(this.tasksOnTheWeek(week));
+    const aggregated = allMembers.reduce((accum: any, member: string) => {
+      accum[member] = 0;
+      return accum;
+    }, {});
+    tasks.forEach(task => {
+        task.members.forEach(member => {
+          aggregated[member] += task.workload;
+        });
+      });
+    return { aggregated, allMembers };
+  }
+
+  makeWeekOptions() {
+    const weeks = this.getAllWeeks();
+    const selectWeek = d3.select('#bar-progress-select-week');
+    const options = selectWeek.selectAll('option').data(weeks);
+    options.enter().append('option')
+      .text(d => d);
+    selectWeek.on('change', () => this.render());
+
+  }
+
+  getAllWeeks() {
+    const allWeeks = new Set(
+      this.tasks
+        .filter(task => task.completion_rate === 100)
+        .map(task => getWeekByMoment(task.completed_date))
+        .sort((week1, week2) => {
+          if (week1.lastSaturday < week2.lastSaturday) {
+            return 1;
+          } else if (week1.lastSaturday > week2.lastSaturday) {
+            return -1;
+          } else {
+            return 0;
+          }
+        })
+        .map(week => week.weekSpecifier)
+      );
+    return [...Array.from(allWeeks)];
+  }
+
+  tasksOnTheWeek(week: Week) {
+    const { lastSaturday, thisFriday } = week;
+    const filteredTasks = this.tasks.filter(task =>
+      task.completion_rate === 100 &&
+      task.completed_date.isBetween(lastSaturday, thisFriday, 'day', '[]'));
+    console.log(filteredTasks);
+    return filteredTasks;
+  }
+
+  fixMembers(tasks: Task[]) {
+    let allMembers = tasks.reduce((accum: string[], task) => {
       if (task.members[0] === '__ALL__') {
         return accum;
       } else {
         return [...accum, ...task.members];
       }
     }, []);
-    this.allMembers = [...Array.from(new Set(this.allMembers))];
-    this.tasks.forEach(task => {
+    allMembers = [...Array.from(new Set(allMembers))];
+    tasks.forEach(task => {
       if (task.members[0] === '__ALL__') {
-        task.members = this.allMembers;
+        task.members = allMembers;
       }
     });
-    console.log({fixed: this.tasks});
+    return { tasks, allMembers };
   }
 
-  transformData() {
-    this.aggr = this.allMembers.reduce((accum, member) => {
-      accum[member] = 0;
-      return accum;
-    }, {});
-    this.tasks.filter(task => task.completion_rate === 100).forEach(task => {
-      task.members.forEach(member => {
-        this.aggr[member] += task.workload;
-      });
-    });
-    console.log({aggr: this.aggr});
-  }
-
-  drawChart() {
+  drawChart({ aggregated, allMembers}: { aggregated: any, allMembers: string[] }) {
     const chartSpec: Highcharts.Options = {
       chart: {
           type: 'column'
       },
       title: {
-          text: 'Total fruit consumtion, grouped by gender'
+          text: 'Weekly progress'
       },
       xAxis: {
-          categories: this.allMembers,
+          categories: allMembers,
       },
       yAxis: {
           allowDecimals: false,
           min: 0,
           title: {
-              text: 'Number of fruits'
+              text: 'Hour'
           }
       },
       tooltip: {
@@ -102,7 +146,7 @@ export class BarProgressComponent implements OnInit {
       },
       series: []
     };
-    Object.entries(this.aggr).forEach(([name, workhour], ind) => {
+    Object.entries(aggregated).forEach(([name, workhour], ind) => {
       chartSpec.series.push({
         type: 'column',
         name: name,

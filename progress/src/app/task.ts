@@ -12,7 +12,7 @@ export class Task {
   completion_rate: number;
   completed_date: moment.Moment;
 
-  constructor(content, duedate, members, project, workload, completed='', completed_date='') {
+  constructor(content, duedate, members, project, workload, completed = '', completed_date = '') {
     this.id = Task.task_id_cnt++;
     this.content = (d => {
       return d === '' ? '내용 없음' : d;
@@ -33,10 +33,10 @@ export class Task {
     })(workload);
     this.completion_rate = (d => {
       const d_int = parseInt(d, 10);
-      if(!isNaN(d_int)) {
+      if (!isNaN(d_int)) {
         return Math.min(Math.max(d_int, 0), 100);
       }
-      if(d.length > 0) {
+      if (d.length > 0) {
         return 100;
       }
       return 0;
@@ -44,7 +44,7 @@ export class Task {
     this.completed_date = (d => {
       return d.split('.').length === 3 ?
         moment(d, 'YYYY.MM.DD hh:mm aa') :
-        moment().add(21, 'days');
+        this.duedate.add(7, 'days');
     })(completed_date);
   }
 }
