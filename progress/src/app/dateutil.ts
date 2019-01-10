@@ -25,3 +25,13 @@ export function getWeekBySpecifier(specifier: string): Week {
         thisFriday: moment(dayTo, dateFormat)
     };
 }
+
+export function weekCompare(week1: Week, week2: Week) {
+    if (week1.lastSaturday < week2.lastSaturday) {
+        return -1;
+    } else if (week1.lastSaturday > week2.lastSaturday) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
