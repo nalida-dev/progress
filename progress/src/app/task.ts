@@ -27,7 +27,12 @@ export class Task {
         ['__ALL__'] :
         d.split(',').map(s => s.trim());
     })(members);
-    this.project = project;
+    this.project = ((d: string) => {
+      if (!d) {
+        return '';
+      }
+      return d.split(':')[0];
+    })(project);
     this.workload = (d => {
       return d === '' ? 0.5 : parseFloat(d);
     })(workload);

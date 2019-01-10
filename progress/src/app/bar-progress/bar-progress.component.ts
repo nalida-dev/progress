@@ -46,18 +46,21 @@ export class BarProgressComponent implements OnInit {
   }
 
   transformData(week: Week) {
-    const { lastSaturday, thisFriday } = week;
     const { tasks, allMembers } = this.fixMembers(this.tasksOnTheWeek(week));
-    const aggregated = allMembers.reduce((accum: any, member: string) => {
-      accum[member] = 0;
-      return accum;
+    const allProjects = [...Array.from(new Set(tasks.map(task => task.project)))];
+    const projectToTimes = allProjects.reduce((_projectToTimes: any, project: string) => {
+      _projectToTimes[project] = allMembers.reduce((times: any, member: string) => {
+        times[member] = 0;
+        return times;
+      }, {});
+      return _projectToTimes;
     }, {});
-    tasks.forEach(task => {
-        task.members.forEach(member => {
-          aggregated[member] += task.workload;
+    tasks.forEach(({project, members, workload}) => {
+        members.forEach(member => {
+          projectToTimes[project][member] += workload;
         });
       });
-    return { aggregated, allMembers };
+    return { projectToTimes, allMembers, allProjects };
   }
 
   makeWeekOptions() {
@@ -106,7 +109,7 @@ export class BarProgressComponent implements OnInit {
         return [...accum, ...task.members];
       }
     }, []);
-    allMembers = [...Array.from(new Set(allMembers))];
+    allMembers = [...Array.from(new Set(allMembers))].sort((name1, name2) => name1.localeCompare(name2));
     tasks.forEach(task => {
       if (task.members[0] === '__ALL__') {
         task.members = allMembers;
@@ -115,7 +118,8 @@ export class BarProgressComponent implements OnInit {
     return { tasks, allMembers };
   }
 
-  drawChart({ aggregated, allMembers}: { aggregated: any, allMembers: string[] }) {
+  drawChart({ projectToTimes, allMembers, allProjects }:
+    { projectToTimes: any, allMembers: string[], allProjects: string[] }) {
     const chartSpec: Highcharts.Options = {
       chart: {
           type: 'column'
@@ -147,14 +151,13 @@ export class BarProgressComponent implements OnInit {
       },
       series: []
     };
-    Object.entries(aggregated).forEach(([name, workhour], ind) => {
+    Object.entries(projectToTimes).forEach(([project, times], ind) => {
       chartSpec.series.push({
         type: 'column',
-        name: name,
-        data: [...Array.from('0'.repeat(ind)).map(d => +d), workhour],
-        color: nameToColor(name),
+        name: project,
+        data: allMembers.map(member => times[member]),
+        color: nameToColor(project),
         // stack: 'male',
-        // color: 'red',
       });
     });
     Highcharts.chart('bar-progress-barchart', chartSpec);
